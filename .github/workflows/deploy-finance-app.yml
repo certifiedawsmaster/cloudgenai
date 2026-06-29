@@ -1,0 +1,72 @@
+name: Deploy finance-app Infrastructure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/finance-app/**'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action'
+        required: true
+        default: 'apply'
+        type: choice
+        options:
+          - apply
+          - destroy
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_DIR: apps/finance-app
+  AWS_REGION: us-east-1
+
+jobs:
+  terraform:
+    name: Terraform Deploy
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: apps/finance-app
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::880247664530:role/cloudgenai-github-deploy-role
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+        env:
+          TF_VAR_app_name: finance-app
+
+      - name: Terraform Apply
+        if: github.event.inputs.action != 'destroy'
+        run: terraform apply -auto-approve tfplan
+        env:
+          TF_VAR_app_name: finance-app
+
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy'
+        run: terraform destroy -auto-approve
+        env:
+          TF_VAR_app_name: finance-app
